@@ -1,0 +1,4 @@
+/home/pi/driver/build/CMakeFiles/main.dir
+/home/pi/driver/build/CMakeFiles/rebuild_cache.dir
+/home/pi/driver/build/CMakeFiles/edit_cache.dir
+/home/pi/driver/build/CMakeFiles/joystickPS3_libs.dir

@@ -1,0 +1,2 @@
+/usr/bin/ar qc libjoystickPS3_libs.a  CMakeFiles/joystickPS3_libs.dir/src/joystick.cpp.o CMakeFiles/joystickPS3_libs.dir/src/driver.cpp.o
+/usr/bin/ranlib libjoystickPS3_libs.a
