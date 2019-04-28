@@ -1,1 +1,0 @@
-/usr/bin/c++      CMakeFiles/main.dir/src/main.cpp.o  -o main -Wl,-rpath,/usr/local/lib -rdynamic libjoystickPS3_libs.a /usr/local/lib/libwiringPi.so 

@@ -35,6 +35,21 @@ using namespace std::chrono;
 
 
 
+//Comandos del dispositivo
+#define setLED_RGB 1 // Poner LED_RGB en un color determinado
+#define setBearingVector 2 // Poner punto de referencia de direccion y velocidad
+#define getBatteryState 3  // Leer voltaje de las baterias y enviar al master
+#define startEncoderSampling 4 // comando que solicita empezar a medir el dezplazamiento en las ruedas
+#define setSampleFrecuency 6 // Configurar frecuencia de muestreo del dispositivo
+#define getBufferData 7 // Leer la data muestreada por el dispositivo y almacenada en el buffer
+#define resetRobot  8 // Reniciar el robot
+
+#define masterDeviceAddress 2
+#define pantiltDeviceAddress 255
+#define robotDeviceAddress 1 
+
+
+
 enum robotStates
 {
     idle,
@@ -44,6 +59,7 @@ enum robotStates
     pantiltRoll,
     pantiltYaw,
     pantilt,
+    readDataFromRobot,
     reset,
     powerOff
 
@@ -58,8 +74,8 @@ struct Buttons // from ps3 joystick
     bool enableReverse;
 
     
-    int acceleration; // -32k-32k
-    int direction ;   //  -32k-32k
+    int acceleration; // -32k to 32k
+    int direction ;   //  -32k to 32k
 
     // pantilt
     bool enableYaw;
@@ -71,6 +87,9 @@ struct Buttons // from ps3 joystick
 
     bool reset;
     bool powerOff;
+
+    int64_t timestampReset;
+    int counterReset;
 
 
 };
@@ -115,8 +134,14 @@ class Driver
         void stateMachine();
         void setYaw();
         void setRoll();
-        void setPWM();
+        void setCommandPWM();
+        void setCommandEncoderSampling();
+        void setCommandSampleFrecuency();
+        void setCommandGetBufferData();
+        void setCommandResetRobot();
         void reset();
+
+        static void alarmWakeup(int sig_num);
 
         int remap(int lowest, int highest, int newLowest, int newHighest, int analogValue);
         int remap2(int acceleration, int analogValue);
@@ -149,6 +174,18 @@ class Driver
 
         Buttons robotButton;
         int robotState;
+
+        static Timestamp timestamp;
+        static int64_t time_stamp1, time_stamp2;
+        static bool startSampling;
+        static bool finishSampling;
+        int countStartButton;
+
+        static bool goToGetBufferData;
+
+        
+
+
         
         
     

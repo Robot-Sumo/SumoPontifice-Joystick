@@ -5,8 +5,18 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
+
 
 using namespace std;
+
+
+Timestamp Driver::timestamp;
+int64_t Driver::time_stamp1;
+int64_t Driver::time_stamp2;
+bool Driver::startSampling;
+bool Driver::finishSampling;
+bool Driver::goToGetBufferData;
 
 // public
 Driver::Driver()
@@ -14,6 +24,14 @@ Driver::Driver()
     robotState = robotStates::reset;
     joystickFound = false;
     serialFound = false;
+    startSampling = false;
+    finishSampling = false;
+    countStartButton = 0;
+    goToGetBufferData = false;
+    signal(SIGALRM, alarmWakeup);   
+    ualarm(500000, 500000);
+    
+
     reset();
 }
 
@@ -32,13 +50,17 @@ void Driver::reset()
     robotButton.reset = false;
     robotButton.powerOff = false;
 
+    robotButton.counterReset = 0;
+    
+
+
     pwmForward = 1;
     pwmRight = 0;
     pwmLeft = 0;
     yaw = yaw_90;
     roll = roll_0;
 
-    setPWM();
+    setCommandPWM();
     usleep(1000);
     setYaw();
     usleep(20000);
@@ -89,9 +111,53 @@ void Driver::decodeJoystickButton(JoystickEvent event)
             case R2:
                 break;
             case Select:
+                if(event.value==1)
+                {
+                    robotButton.counterReset++;
+                    
+                    if(robotButton.counterReset>1)
+                    {
+                        if((timestamp.getNanoSecs()-robotButton.timestampReset)>2000000) // 1 sample
+                            robotButton.reset= true;
+
+                    }
+                    robotButton.timestampReset = timestamp.getNanoSecs();
+    
+                }
+                else
+                {
+                    robotButton.reset= false;
+                }
+                
+                
+            
+                robotButton.reset = (event.value==1);
                 break;
             case Start:
-                robotButton.reset = (event.value==1);
+                if (event.value==1);
+                {
+                    countStartButton++;
+                    
+                    if (countStartButton == 2)
+                    {
+                        startSampling = true;
+                        setCommandEncoderSampling();
+                        ualarm(500000, 500000);
+                        time_stamp2 = timestamp.getNanoSecs(); 
+
+                    }
+
+                    if(countStartButton >4)
+                    {
+                        finishSampling = true;
+                        alarm(0); // cancelar alarma
+                        cout << "Sampling finished" << endl;
+                    }
+                    
+     
+                    
+                }
+                
                 break;
             case PS:
                 robotButton.powerOff = (event.value==1);
@@ -158,6 +224,7 @@ void Driver::run()
     {
         decodeJoystickButton(event);
         //time_stamp2 = timestamp.getNanoSecs();
+        
         stateMachine();
         
         
@@ -198,11 +265,18 @@ void Driver::stateMachine()
         case robotStates::idle:
 
             // Desplazamiento
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableForward) robotState = robotStates::forward;
             else if(robotButton.enableReverse) robotState = robotStates::reverse;
-            else if(robotButton.reset) robotState = robotStates::reset;
+            else if(robotButton.reset) {robotState = robotStates::reset;
+            robotButton.reset = false;
+            }
             else if(robotButton.enableRoll && robotButton.enableYaw) robotState = robotStates::pantilt;
             else if(robotButton.enableRoll) robotState = robotStates::pantiltRoll;
             else if(robotButton.enableYaw) robotState = robotStates::pantiltYaw; // No está pulsado ningun boton de Desplazamiento ni el reset
@@ -228,10 +302,15 @@ void Driver::stateMachine()
                 pwmRight = pwmModule;
                 
             }
-            setPWM();
+            setCommandPWM();
 
             // Pantilt
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableRoll && robotButton.enableYaw) robotState = robotStates::pantilt;
             else if(robotButton.enableRoll) robotState = robotStates::pantiltRoll;
@@ -257,10 +336,15 @@ void Driver::stateMachine()
                 pwmRight = pwmModule;
                 
             }
-            setPWM();
+            setCommandPWM();
 
             // Pantilt
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableRoll && robotButton.enableYaw) robotState = robotStates::pantilt;
             else if(robotButton.enableRoll) robotState = robotStates::pantiltRoll;
@@ -275,9 +359,13 @@ void Driver::stateMachine()
             pwmModule = 0;
             pwmLeft = 0;
             pwmRight = 0;
-            setPWM();
-            
-            if(robotButton.enableRoll && robotButton.enableYaw) robotState = robotStates::pantilt;
+            setCommandPWM();
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.enableRoll && robotButton.enableYaw) robotState = robotStates::pantilt;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableRoll) robotState = robotStates::pantiltRoll;
             else if(robotButton.enableYaw) robotState = robotStates::pantiltYaw;
@@ -293,7 +381,12 @@ void Driver::stateMachine()
             usleep(10000);
             setRoll();
 
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableForward) robotState = robotStates::forward;
             else if(robotButton.enableReverse) robotState = robotStates::reverse;
@@ -306,7 +399,12 @@ void Driver::stateMachine()
 
             setYaw();
 
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableForward) robotState = robotStates::forward;
             else if(robotButton.enableReverse) robotState = robotStates::reverse;
@@ -319,7 +417,12 @@ void Driver::stateMachine()
 
             setRoll();
             
-            if(robotButton.stop) robotState = robotStates::stop;
+            if(goToGetBufferData) 
+            {
+                goToGetBufferData = false;
+                robotState = robotStates::readDataFromRobot;
+            }
+            else if(robotButton.stop) robotState = robotStates::stop;
             else if(robotButton.powerOff) robotState = robotStates::powerOff;
             else if(robotButton.enableForward) robotState = robotStates::forward;
             else if(robotButton.enableReverse) robotState = robotStates::reverse;
@@ -328,16 +431,19 @@ void Driver::stateMachine()
             break;
         
         case robotStates::reset:
-            pwmForward = 1;
-            pwmRight = 0;
-            pwmLeft = 0;
             yaw = yaw_90;
             roll = roll_0;
-            setPWM();
-            usleep(10000);
+
+     
+            setCommandResetRobot();
+            usleep(20000);
             setYaw();
-            usleep(10000);
+            usleep(20000);
             setRoll();
+            usleep(20000);
+            
+
+            
 
             robotState = robotStates::idle;
             //cout << "reset" << endl;
@@ -351,6 +457,12 @@ void Driver::stateMachine()
             // Delete old directories
             system("sudo shutdown -h now");
             exit(1);
+            break;
+
+        case robotStates::readDataFromRobot:
+
+            setCommandGetBufferData();
+            robotState = robotStates::idle;
             break;
 
         default:
@@ -404,10 +516,10 @@ void Driver::setRoll()
 }
 
 
-void Driver::setPWM()
+void Driver::setCommandPWM()
 {
-    char address = 1;
-    char command = 1; // set pwm
+    char address = robotDeviceAddress;
+    char command = setBearingVector; // set pwm
     char lastchar = '\n';
     char write_buffer[] = {address, command, char(pwmLeft), char(pwmRight), char(pwmForward), lastchar };  
     if(pwmRight>=0 && pwmRight <=255 && pwmLeft>=0 && pwmLeft<=255)
@@ -436,4 +548,81 @@ int Driver::remap2(int acceleration, int analogValue)
     return int(newValue);
 }
 
+void Driver::setCommandEncoderSampling()
+{
+    char address = robotDeviceAddress;
+    char command = startEncoderSampling; // set pwm
+    char lastchar = '\n';
+    char write_buffer[] = {address, command, lastchar };  
+    write(serialPort ,write_buffer,sizeof(write_buffer));
 
+}
+
+
+void Driver::setCommandSampleFrecuency()
+{
+    char address = robotDeviceAddress;
+    char command = setSampleFrecuency; // set pwm
+    char lastchar = '\n';
+    char write_buffer[] = {address, command, lastchar };  
+    write(serialPort ,write_buffer,sizeof(write_buffer));
+
+}
+
+
+void Driver::setCommandResetRobot()
+{
+    char address = robotDeviceAddress;
+    char command = resetRobot; // set pwm
+    char lastchar = '\n';
+    char write_buffer[] = {address, command, lastchar };  
+    write(serialPort ,write_buffer,sizeof(write_buffer));
+
+}
+
+void Driver::setCommandGetBufferData()
+{
+    char address = robotDeviceAddress;
+    char command = getBufferData; // set pwm
+    char lastchar = '\n';
+    char write_buffer[] = {address, command, lastchar };  
+    write(serialPort ,write_buffer,sizeof(write_buffer));
+
+    usleep(10000);
+
+    char buf [1000];
+    int n = read (serialPort, buf, sizeof buf);  // read up to 100 characters if ready to read
+    cout << "size " << n <<endl;
+    /*
+    for (int i = 0; i < n ; i++)
+    {
+        cout<< buf[i] << " " ;
+    }
+    cout << endl;
+    */
+
+}
+
+
+
+void Driver::alarmWakeup(int sig_num)
+{
+    unsigned int i;
+    
+    if(sig_num == SIGALRM)
+    {
+        time_stamp1 = timestamp.getNanoSecs();
+        
+        if(startSampling)
+        {
+            
+            std::cout << " time  = " << (time_stamp1-time_stamp2)/1000000.0<< "ms"<<std::endl;
+            goToGetBufferData = true;
+
+        }
+        time_stamp2 = time_stamp1;
+        
+        
+    }
+    
+}

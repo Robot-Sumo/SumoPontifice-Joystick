@@ -11,11 +11,12 @@
 
 using namespace std;
 
+
 int main(int argc, char** argv)
 {
     // Create an instance of driver
     Driver driver;
-    usleep(10000000); // esperar un segundo
+    usleep(1000); // esperar un segundo
     driver.openJoystickDev("/dev/input/js0");
     
 
@@ -25,22 +26,22 @@ int main(int argc, char** argv)
 
      while (!driver.joystickFound)
     {
-      printf("open joystick failed.\n");
-      usleep(10000000); // esperar un segundo
-      driver.openJoystickDev("/dev/input/js0");
+        printf("open joystick failed.\n");
+        usleep(10000000); // esperar un segundo
+        driver.openJoystickDev("/dev/input/js0");
     }
-    usleep(15000000); // esperar un segundo
-    driver.openSerialDev("/dev/ttyUSB0", 9600);
+    usleep(1500); // esperar un segundo
+    driver.openSerialDev("/dev/ttyUSB0", 57600);
     while (!driver.serialFound)
     {
-      printf("open serial port failed.\n");
-      usleep(10000000); // esperar un segundo
-      driver.openSerialDev("/dev/ttyUSB0", 9600);
+        printf("open serial port failed.\n");
+        usleep(10000000); // esperar un segundo
+        driver.openSerialDev("/dev/ttyUSB0", 57600);
     }
 
     while (true)
     {
-      driver.run();
+        driver.run();
     }
     
   
