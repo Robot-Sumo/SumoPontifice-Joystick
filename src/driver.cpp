@@ -28,6 +28,7 @@ Driver::Driver()
     finishSampling = false;
     countStartButton = 0;
     goToGetBufferData = false;
+    currentTimeSeconds = 0.0;
     signal(SIGALRM, alarmWakeup);   
     ualarm(500000, 500000);
     
@@ -81,6 +82,13 @@ void Driver::openSerialDev(string device, int baudrate )
     serialFound = (serialPort != -1) ;
 
 }
+
+
+void Driver::openOutputFile(string outputDirectory)
+{
+    outputFilecsv.open(outputDirectory+"outputRobotEncoder.csv", std::ofstream::out | std::ofstream::trunc);
+}
+
 
 // private
 void Driver::decodeJoystickButton(JoystickEvent event)
@@ -150,9 +158,14 @@ void Driver::decodeJoystickButton(JoystickEvent event)
                     if(countStartButton >4)
                     {
                         finishSampling = true;
+                        setCommandResetRobot();
                         alarm(0); // cancelar alarma
                         cout << "Sampling finished" << endl;
+                        outputFilecsv.close();
+
                     }
+
+                    cout << " counterStart " << countStartButton <<endl;
                     
      
                     
@@ -489,7 +502,11 @@ void Driver::setYaw()
         
     }
 
-    write(serialPort , write_buffer, sizeof(write_buffer));
+    if(lastYaw != yaw )
+    {
+        write(serialPort , write_buffer, sizeof(write_buffer));
+    }
+        
     
 
 }
@@ -511,7 +528,11 @@ void Driver::setRoll()
     {
         write_buffer[2] = roll;
     }
-    write(serialPort, write_buffer,sizeof(write_buffer));
+    if(lastRoll != roll)
+    {
+        write(serialPort, write_buffer,sizeof(write_buffer));
+    }
+    
  
 }
 
@@ -522,10 +543,15 @@ void Driver::setCommandPWM()
     char command = setBearingVector; // set pwm
     char lastchar = '\n';
     char write_buffer[] = {address, command, char(pwmLeft), char(pwmRight), char(pwmForward), lastchar };  
-    if(pwmRight>=0 && pwmRight <=255 && pwmLeft>=0 && pwmLeft<=255)
+    if(lastPwmForward != pwmForward ||  lastPwmRight != pwmRight|| 
+    lastPwmLeft != pwmLeft )
     {
-        write(serialPort ,write_buffer,sizeof(write_buffer));
+        if(pwmRight>=0 && pwmRight <=255 && pwmLeft>=0 && pwmLeft<=255)
+        {
+            write(serialPort ,write_buffer,sizeof(write_buffer));
 
+        }
+    
     }
 
 }
@@ -590,9 +616,10 @@ void Driver::setCommandGetBufferData()
 
     usleep(10000);
 
-    char buf [1000];
-    int n = read (serialPort, buf, sizeof buf);  // read up to 100 characters if ready to read
-    cout << "size " << n <<endl;
+    sizeDataPackage = read (serialPort, bufferData, sizeof bufferData);  // read up to 100 characters if ready to read
+    
+    cout << "Size package recieved = " << sizeDataPackage <<endl;
+    dataPackage2File();
     /*
     for (int i = 0; i < n ; i++)
     {
@@ -601,6 +628,29 @@ void Driver::setCommandGetBufferData()
     cout << endl;
     */
 
+}
+
+
+void Driver::dataPackage2File()
+{
+
+    int j;
+    j= 0;
+    for(int i = 0; i< sizeDataPackage/4; i++) 
+    {
+
+        currentTimeSeconds = currentTimeSeconds+0.05;
+        dataEncoderLeft = bufferData[j+1]+(bufferData[j]<<8);
+        dataEncoderRight = bufferData[j+3]+(bufferData[j+2]<<8);
+        outputFilecsv <<  currentTimeSeconds<<  ","  // indice de tiempo en segundos
+        << dataEncoderLeft <<"," // Data del encoder de la rueda izquierda
+        << dataEncoderRight     // Data del encoder de la rueda derecha
+        <<endl;
+        j = j+4;
+
+
+    }
+   
 }
 
 
@@ -616,8 +666,13 @@ void Driver::alarmWakeup(int sig_num)
         if(startSampling)
         {
             
-            std::cout << " time  = " << (time_stamp1-time_stamp2)/1000000.0<< "ms"<<std::endl;
-            goToGetBufferData = true;
+            if(!finishSampling)
+            {
+                std::cout << " time  = " << (time_stamp1-time_stamp2)/1000000.0<< "ms"<<std::endl;
+                goToGetBufferData = true;
+                
+            }
+
 
         }
         time_stamp2 = time_stamp1;

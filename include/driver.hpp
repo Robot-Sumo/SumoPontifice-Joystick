@@ -4,6 +4,8 @@
 #include "joystick.hpp"
 #include <string>
 #include <chrono>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 using namespace std::chrono;
@@ -118,7 +120,7 @@ class Driver
     public:
 
         Driver();
-        
+        void openOutputFile(string outputDirectory);
         void openJoystickDev(string device );
         void openSerialDev(string device, int baudrate);
         void run();
@@ -128,6 +130,7 @@ class Driver
 
 
     private:
+        std::ofstream outputFilecsv;
         Joystick joystick;
         int serialPort;
         void decodeJoystickButton(JoystickEvent event);
@@ -140,8 +143,10 @@ class Driver
         void setCommandGetBufferData();
         void setCommandResetRobot();
         void reset();
+        void dataPackage2File();
 
         static void alarmWakeup(int sig_num);
+        
 
         int remap(int lowest, int highest, int newLowest, int newHighest, int analogValue);
         int remap2(int acceleration, int analogValue);
@@ -182,13 +187,15 @@ class Driver
         int countStartButton;
 
         static bool goToGetBufferData;
+        char bufferData [1000]; // Buffer de entrada serial
+        int sizeDataPackage;
+        int dataEncoderLeft;
+        int dataEncoderRight;
+        double currentTimeSeconds;
 
-        
 
 
-        
-        
-    
+            
 };
 
 #endif

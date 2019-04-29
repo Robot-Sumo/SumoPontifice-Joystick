@@ -39,6 +39,8 @@ int main(int argc, char** argv)
         driver.openSerialDev("/dev/ttyUSB0", 57600);
     }
 
+    driver.openOutputFile("/home/pi/");
+
     while (true)
     {
         driver.run();
